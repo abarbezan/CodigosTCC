@@ -1,0 +1,203 @@
+#CÓDIGO DESENVOLVIDO NO RSTUDIO EM LINGUAGEM R
+
+# PASSO 1: Limpeza do ambiente
+rm(list = ls())
+gc()
+
+# PASSO 2: Instalar e carregar pacotes (se necessário)
+# install.packages("tidyverse")
+library(tidyverse)
+
+# PASSO 3: Carregar banco de dados
+file_path <- "C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/Resultados Preliminares/Dados_Lista_Pecas_Segundo-Trimestre_2022.csv"
+data <- read.csv(file_path, fileEncoding = "latin1")
+data_original <- read.csv(file_path, fileEncoding = "latin1")
+
+# PASSO 4: Renomear colunas
+colnames(data) <- LETTERS[1:26]
+
+# PASSO 5: Ajuste das variáveis numéricas
+replace_comma <- function(x) as.numeric(gsub(",", ".", x))
+data <- data %>%
+  mutate_at(vars(C, D, K, L, M, N, O, P, Q, V, W, X, Y, Z), replace_comma)
+
+data$C <- as.character(data$C)  # Converter coluna C para character
+
+# PASSO 6: Gráficos comparativos
+
+# PASSO 6.1: Gráfico USD/kg
+data_summary <- data %>%
+  group_by(A) %>%
+  summarise(Custo_Medio = mean(Q), Peso_Medio = mean(V/1000))  # Converter V para kg
+
+ggplot(data_summary, aes(x = Peso_Medio, y = Custo_Medio, color = A)) +
+  geom_point() +
+  labs(x = "Peso Médio (kg)", y = "Custo Médio (USD)", title = "Custo Médio vs. Peso Médio por Programa") +
+  geom_text(aes(label = A), hjust = 0, vjust = 0)  # Adicionar rótulos aos pontos
+
+# PASSO 6.2: Gráfico Volume/qnt de peça
+data$Volume <- ((data$X * data$Y * data$Z) / 1000^3)
+data_summary <- data %>%
+  group_by(A) %>%
+  summarise(Volume_Total = mean(Volume), Qtd_Pecas = sum(D))
+
+ggplot(data_summary, aes(x = Qtd_Pecas, y = Volume_Total, color = A)) +
+  geom_point() +
+  labs(x = "Quantidade de Peças", y = "Volume Total (m³)", title = "Volume Total vs. Quantidade de Peças por Programa") +
+  geom_text(aes(label = A), hjust = 0, vjust = 0) +
+  scale_y_continuous(labels = scales::comma_format())  # Formatar eixo y como inteiro
+
+# PASSO 6.3: Gráfico horas/qnt de peça
+data_summary <- data %>%
+  group_by(A) %>%
+  summarise(Horas_Total = sum(W), Qtd_Pecas = sum(D), Horas_Por_Peca = Horas_Total / Qtd_Pecas)
+
+ggplot(data_summary, aes(x = Qtd_Pecas, y = Horas_Por_Peca, color = A)) +
+  geom_point() +
+  labs(x = "Quantidade de Peças", y = "Horas por Peça", title = "Horas por Peça vs. Quantidade de Peças por Programa") +
+  geom_text(aes(label = A), hjust = 0, vjust = 0)
+
+# PASSO 7: Avaliação Análoga
+analise_analoga <- data %>%
+  filter(R == "USINADO",
+         S == "INTEGRADO",
+         T == "STUB FULL TENSION",
+)
+
+# Ajuste dos valores da coluna I - comunizar valores escritos de forma distinta
+
+analise_analoga$I[analise_analoga$I == "COMPRADO"] <- "COMPRA NACIONAL"
+analise_analoga$I[analise_analoga$I == "ESTAMPADO"] <- "ESTAMPARIA"
+analise_analoga$I[analise_analoga$I == "USINADO"] <- "USINAGEM"
+analise_analoga$I[analise_analoga$I == "ESTAMPARIAL"] <- "ESTAMPARIA"
+
+# PASSO 8: Separação por tecnologia e cálculos dos fatores
+
+# PASSO 8.1: Fator USD/kg por tecnologia
+usd_kg_por_tecnologia <- analise_analoga %>%
+  group_by(I) %>%
+  summarise(USD_por_kg = sum(P) / sum(K))
+
+qnt_tecnologia <- analise_analoga %>%
+  group_by(I) %>%
+  summarise(Qtd = sum(D)) %>%
+  mutate(Percentual = Qtd / sum(Qtd))
+
+peso_tecnologia <- analise_analoga %>%
+  group_by(I) %>%
+  summarise(Peso_Medio = weighted.mean(V, D)) %>%  # Peso médio ponderado pela quantidade
+  left_join(qnt_tecnologia, by = "I") %>%
+  mutate(Peso_Total = Peso_Medio * Percentual)
+
+print(usd_kg_por_tecnologia)
+print(qnt_tecnologia)
+print(peso_tecnologia)
+
+# Plotar valores (USD/kg por tecnologia, % de peças por tecnologia, peso total por tecnologia)
+ggplot(usd_kg_por_tecnologia, aes(x = I, y = USD_por_kg)) +
+  geom_col() +
+  labs(x = "Tecnologia", y = "USD/kg", title = "USD/kg por Tecnologia")
+
+ggplot(qnt_tecnologia, aes(x = I, y = Percentual)) +
+  geom_col() +
+  labs(x = "Tecnologia", y = "Percentual", title = "% de Peças por Tecnologia")
+
+ggplot(peso_tecnologia, aes(x = I, y = Peso_Total)) +
+  geom_col() +
+  labs(x = "Tecnologia", y = "Peso Total", title = "Peso Total por Tecnologia")
+
+# PASSO 8.2: Fator m³/qnt de peças
+fator_m3_qnt <- sum(analise_analoga$Volume) / sum(analise_analoga$D)
+
+# Plotar valor
+print(fator_m3_qnt)
+
+# PASSO 8.3: Fator horas/qnt de peças
+fator_horas_qnt <- sum(analise_analoga$W) / sum(analise_analoga$D)
+
+# Plotar valor
+print(fator_horas_qnt)
+
+# PASSO 9: Predição dos valores
+
+# PASSO 9.1: Entrada dos valores
+input_data <- data.frame(
+  X = 11500,
+  Y = 3759,
+  Z = 825,
+  R = "USINADO",
+  S = "INTEGRADO",
+  T = "STUB FULL TENSION"
+)
+
+# PASSO 9.2: Predição do custo
+volume_input <- (input_data$X * input_data$Y * input_data$Z) / 1000^3
+
+# Interpolação linear para encontrar o peso predito
+media_coluna_V <- mean(data$V, na.rm = TRUE)
+print(media_coluna_V)
+media_coluna_Volume <- mean(data$Volume, na.rm = TRUE)
+print(media_coluna_Volume)
+peso_predito <- (volume_input * media_coluna_V / media_coluna_Volume)
+print(peso_predito)
+
+# Criar novo dataset com o peso predito por tecnologia
+peso_tecnologia_predito <- peso_tecnologia %>%
+  mutate(USD_por_Tecnologia = Percentual * peso_predito * usd_kg_por_tecnologia$USD_por_kg[match(I, usd_kg_por_tecnologia$I)])
+
+print(peso_tecnologia_predito)
+
+# Substituir valores NA por zero nas matrizes
+
+peso_tecnologia_predito[is.na(peso_tecnologia_predito)] <- 0
+
+# Calcular o custo total predito
+custo_total_predito <- sum(peso_tecnologia_predito$USD_por_Tecnologia)
+print(custo_total_predito)
+
+# Plotar custo total predito
+cat("Custo total predito:", custo_total_predito, "\n")
+
+# PASSO 9.3: Predição do peso
+# O peso predito já foi calculado na etapa 9.2 (peso_predito)
+print(peso_predito)
+
+cat("Peso predito:", peso_predito, "\n")
+
+# PASSO 9.4: Predição das horas de produção
+qnt_pecas_predito <- volume_input / fator_m3_qnt
+horas_preditas <- qnt_pecas_predito * fator_horas_qnt
+print(horas_preditas)
+
+# Plotar horas preditas
+cat("Horas preditas:", horas_preditas, "\n")
+
+# PASSO 10: Incluir valores preditos nos gráficos
+
+# PASSO 10.1: Gráfico USD/Kg + predição
+data_summary <- data %>%
+  group_by(A) %>%
+  summarise(Custo_Medio = mean(Q), Peso_Medio = mean(V/1000))  # Converter V para kg
+
+ggplot(data_summary, aes(x = Peso_Medio, y = Custo_Medio, color = A)) +
+  geom_point() +
+  labs(x = "Peso Médio (kg)", y = "Custo Médio (USD)", title = "Custo Médio vs. Peso Médio por Programa") +
+  geom_text(aes(label = A), hjust = 0, vjust = 0) +
+  geom_point(aes(x = peso_predito / 1000, y = custo_total_predito), color = "red", size = 4)  # Ponto vermelho para a predição
+
+# PASSO 10.2: Gráfico volume/qnt de peças + predição
+ggplot(data_summary, aes(x = Qtd_Pecas, y = Volume_Total, color = A)) +
+  geom_point() +
+  labs(x = "Quantidade de Peças", y = "Volume Total (m³)", title = "Volume Total vs. Quantidade de Peças por Programa") +
+  geom_text(aes(label = A), hjust = 0, vjust = 0) +
+  geom_point(aes(x = (qnt_pecas_predito*10000), y = volume_input), color = "red", size = 4) +  # Ponto vermelho para a predição
+  scale_y_continuous(labels = scales::comma_format())  # Formatar eixo y como inteiro
+
+# PASSO 10.3: Gráfico horas/qnt de peça + predição
+ggplot(data_summary, aes(x = Qtd_Pecas, y = Horas_Por_Peca, color = A)) +
+  geom_point() +
+  labs(x = "Quantidade de Peças", y = "Horas por Peça", title = "Horas por Peça vs. Quantidade de Peças por Programa") +
+  geom_text(aes(label = A), hjust = 0, vjust = 0) +
+  geom_point(data = data.frame(Qtd_Pecas = qnt_pecas_predito, Horas_Por_Peca = horas_preditas), color = "red", size = 4)  # Ponto vermelho para a predição
+
+
