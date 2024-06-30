@@ -1,0 +1,438 @@
+# PASSO 1: Limpar ambiente
+rm(list = ls())
+gc()
+
+# PASSO 2: Instalar e Carregar pacotes necessários
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(caret)) install.packages("caret")
+if(!require(randomForest)) install.packages("randomForest")
+if(!require(xgboost)) install.packages("xgboost")
+if(!require(pROC)) install.packages("pROC")
+if(!require(rpart)) install.packages("rpart")
+if(!require(rpart.plot)) install.packages("rpart.plot")
+
+library(tidyverse)
+library(caret)
+library(randomForest)
+library(xgboost)
+library(pROC)
+library(rpart)
+library(rpart.plot)
+
+# PASSO 3: Carregar o banco de dados
+# Banco de dados disponível em https://github.com/abarbezan/CodigosTCC/blob/main/Dados_Lista_Pecas_Segundo-Trimestre_2022.csv
+data <- read.csv("DIGITE AQUI O CAMINHO DO CSV", fileEncoding = "latin1") # Digitar caminho do CSV
+
+# PASSO 4: Carregar uma versão adicional do banco de dados (data_original)
+data_original <- data
+
+# PASSO 5: Renomear colunas
+colnames(data) <- LETTERS[1:26]
+
+# PASSO 6: AJUSTE DAS VARIÁVEIS NUMÉRICAS
+# Função para substituir vírgulas por pontos e converter para numérico
+convert_to_numeric <- function(x) {
+  as.numeric(gsub(",", ".", x))
+}
+
+# Aplicar a função às colunas numéricas e converter outras para fatores
+data[, c("D", "K", "L", "M", "N", "O", "P", "Q", "V", "W", "X", "Y", "Z")] <- 
+  lapply(data[, c("D", "K", "L", "M", "N", "O", "P", "Q", "V", "W", "X", "Y", "Z")], convert_to_numeric)
+
+# PASSO 7: PRÉ-PROCESSAMENTO E ENGENHARIA DE FEATURES (OPCIONAL)
+# ... (Adicionar etapas de pré-processamento e engenharia de features, se necessário)
+
+# PASSO 8: DEFINIÇÃO DOS DADOS DE TREINO E TESTE
+set.seed(123)  # Para reprodutibilidade
+trainIndex <- createDataPartition(data$Q, p = 0.8, list = FALSE)  # 80% para treino
+train_data <- data[trainIndex, ]
+test_data <- data[-trainIndex, ]
+
+# PASSO 9: CRIAÇÃO E TREINAMENTO DOS MODELOS DE ENSEMBLE
+# Random Forest - Custo (Q)
+rf_model_Q <- randomForest(Q ~ X + Y + Z + R + S + T, data = train_data)
+
+# Random Forest - Peso (V)
+rf_model_V <- randomForest(V ~ X + Y + Z + R + S + T, data = train_data)
+
+# Random Forest - Horas (W)
+rf_model_W <- randomForest(W ~ X + Y + Z + R + S + T, data = train_data)
+
+# XGBoost - Custo (Q)
+xgb_train_matrix_Q <- xgb.DMatrix(data = as.matrix(train_data[, c("X", "Y", "Z")]), label = train_data$Q)
+xgb_params_Q <- list(objective = "reg:squarederror", eval_metric = "rmse")
+xgb_model_Q <- xgb.train(params = xgb_params_Q, data = xgb_train_matrix_Q, nrounds = 100)  # Ajuste nrounds
+
+# XGBoost - Peso (V)
+xgb_train_matrix_V <- xgb.DMatrix(data = as.matrix(train_data[, c("X", "Y", "Z")]), label = train_data$V)
+xgb_params_V <- list(objective = "reg:squarederror", eval_metric = "rmse")
+xgb_model_V <- xgb.train(params = xgb_params_V, data = xgb_train_matrix_V, nrounds = 100)  # Ajuste nrounds
+
+# XGBoost - Horas (W)
+xgb_train_matrix_W <- xgb.DMatrix(data = as.matrix(train_data[, c("X", "Y", "Z")]), label = train_data$W)
+xgb_params_W <- list(objective = "reg:squarederror", eval_metric = "rmse")
+xgb_model_W <- xgb.train(params = xgb_params_W, data = xgb_train_matrix_W, nrounds = 100)  # Ajuste nrounds
+
+# PASSO 10: PREVISÕES NOS DADOS DE TESTE
+rf_pred_Q <- predict(rf_model_Q, newdata = test_data)
+xgb_test_matrix_Q <- xgb.DMatrix(data = as.matrix(test_data[, c("X", "Y", "Z")]))
+xgb_pred_Q <- predict(xgb_model_Q, newdata = xgb_test_matrix_Q)
+
+rf_pred_V <- predict(rf_model_V, newdata = test_data)
+xgb_test_matrix_V <- xgb.DMatrix(data = as.matrix(test_data[, c("X", "Y", "Z")]))
+xgb_pred_V <- predict(xgb_model_V, newdata = xgb_test_matrix_V)
+
+rf_pred_W <- predict(rf_model_W, newdata = test_data)
+xgb_test_matrix_W <- xgb.DMatrix(data = as.matrix(test_data[, c("X", "Y", "Z")]))
+xgb_pred_W <- predict(xgb_model_W, newdata = xgb_test_matrix_W)
+
+# PASSO 11: AVALIAÇÃO DO DESEMPENHO
+rf_rmse_Q <- RMSE(rf_pred_Q, test_data$Q)
+xgb_rmse_Q <- RMSE(xgb_pred_Q, test_data$Q)
+
+rf_rmse_V <- RMSE(rf_pred_V, test_data$V)
+xgb_rmse_V <- RMSE(xgb_pred_V, test_data$V)
+
+rf_rmse_W <- RMSE(rf_pred_W, test_data$W)
+xgb_rmse_W <- RMSE(xgb_pred_W, test_data$W)
+
+cat("RMSE Random Forest (Custo):", rf_rmse_Q, "\n")
+cat("RMSE XGBoost (Custo):", xgb_rmse_Q, "\n")
+cat("RMSE Random Forest (Peso):", rf_rmse_V, "\n")
+cat("RMSE XGBoost (Peso):", xgb_rmse_V, "\n")
+cat("RMSE Random Forest (Horas):", rf_rmse_W, "\n")
+cat("RMSE XGBoost (Horas):", xgb_rmse_W, "\n")
+
+# PASSO A: GRÁFICO DE DISPERSÃO VALORES REAIS VS. PREVISTOS
+par(mfrow = c(1, 3))  # Configurar para 3 gráficos lado a lado
+
+# Gráfico para Custo (Q)
+plot(test_data$Q, rf_pred_Q, col = "blue", pch = 16, main = "Random Forest - Custo", xlab = "Valor Real", ylab = "Valor Predito")
+abline(0, 1, col = "red", lty = 2)
+
+plot(test_data$Q, xgb_pred_Q, col = "green", pch = 16, main = "XGBoost - Custo", xlab = "Valor Real", ylab = "Valor Predito")
+abline(0, 1, col = "red", lty = 2)
+
+# Gráfico para Peso (V)
+plot(test_data$V, rf_pred_V, col = "blue", pch = 16, main = "Random Forest - Peso", xlab = "Valor Real", ylab = "Valor Predito")
+abline(0, 1, col = "red", lty = 2)
+
+plot(test_data$V, xgb_pred_V, col = "green", pch = 16, main = "XGBoost - Peso", xlab = "Valor Real", ylab = "Valor Predito")
+abline(0, 1, col = "red", lty = 2)
+
+# Gráfico para Horas (W)
+plot(test_data$W, rf_pred_W, col = "blue", pch = 16, main = "Random Forest - Horas", xlab = "Valor Real", ylab = "Valor Predito")
+abline(0, 1, col = "red", lty = 2)
+
+plot(test_data$W, xgb_pred_W, col = "green", pch = 16, main = "XGBoost - Horas", xlab = "Valor Real", ylab = "Valor Predito")
+abline(0, 1, col = "red", lty = 2)
+
+# PASSO B: ENTRADA DE DADOS PARA PREVISÃO (Valores atualizados)
+input_data <- data.frame(
+  X = c(11500),          # Comprimento
+  Y = c(3759),           # Largura
+  Z = c(825),            # Altura
+  R = c("USINADO"),       # Tecnologia Principal
+  S = c("INTEGRADO"),     # Solução de Montagem
+  T = c("STUB FULL TENSION")   # Solução de Junção
+)
+
+ #Avaliar a necessidade de aplicação dos levels
+#input_data$R <- factor(input_data$R, levels = levels(train_data$R))
+#input_data$S <- factor(input_data$S, levels = levels(train_data$S))
+#input_data$T <- factor(input_data$T, levels = levels(train_data$T))
+
+# PASSO C: PREVISÃO DE OUTPUTS
+# Verificar e converter tipos de dados em input_data
+for (col in c("X", "Y", "Z", "R", "S", "T")) {
+  if (class(input_data[[col]]) != class(train_data[[col]])) {
+    cat("Convertendo", col, "para", class(train_data[[col]]), "\n")
+    if (class(train_data[[col]]) == "factor") {
+      input_data[[col]] <- factor(input_data[[col]], levels = levels(train_data[[col]]))
+    } else {
+      input_data[[col]] <- as(input_data[[col]], class(train_data[[col]]))
+    }
+  }
+}
+#####################################################
+#ETAPA DE VERIFICAÇÃO DOS DADOS" NÃO OBRIGATÓRIO - ESSA SEÇÃO FOI CRIADA PARA AVALIAR ERROS NOS DADOS NA CONCEPÇÃO DO MODELO
+
+# AVALIAR DADOS ENTRE INPUT E TREINO
+print(levels(train_data$R))
+print(levels(input_data$R))
+print(levels(train_data$S))
+print(levels(input_data$S))
+print(levels(train_data$T))
+print(levels(input_data$T))
+
+# VERIFICAR VALORES AUSENTES
+print(any(is.na(input_data)))
+print(any(is.na(train_data$T)))
+
+# Exibir nome das colunas e primeira linha de 'data'
+cat("Dataset 'data':\n")
+print(head(data, 1))
+
+# Exibir nome das colunas e primeira linha de 'train_data'
+cat("\nDataset 'train_data':\n")
+print(head(train_data, 1))
+
+# Encontrar colunas com "USINADO" em 'data'
+colunas_com_usinagem_data <- names(data)[sapply(data, function(x) any(x == "USINADO"))]
+cat("Colunas com 'USINADO' em 'data':", colunas_com_usinagem_data, "\n")
+print(colunas_com_usinagem_data)
+
+# Encontrar colunas com "USINADO" em 'train_data'
+colunas_com_usinagem_train_data <- names(train_data)[sapply(train_data, function(x) any(x == "USINADO"))]
+cat("Colunas com 'USINADO' em 'train_data':", colunas_com_usinagem_train_data, "\n")
+print(colunas_com_usinagem_train_data)
+
+# Contar frequências de valores em cada coluna
+freq_R <- table(data$R)
+freq_S <- table(data$S)
+freq_T <- table(data$T)
+
+freq_RT <- table(train_data$R)
+freq_ST <- table(train_data$S)
+freq_TT <- table(train_data$T)
+
+# Exibir valores e frequências
+cat("Valores e frequências na coluna R:\n")
+print(freq_R)
+print(freq_RT)
+
+cat("\nValores e frequências na coluna S:\n")
+print(freq_S)
+print(freq_ST)
+
+cat("\nValores e frequências na coluna T:\n")
+print(freq_T)
+print(freq_TT)
+
+# FIM ETAPA DE VERIFICAÇÃO DOS DADOS
+#####################################################
+
+
+
+# Realizar as previsões
+rf_pred_Q_input <- predict(rf_model_Q, newdata = input_data) 
+xgb_pred_Q_input <- predict(xgb_model_Q, newdata = xgb.DMatrix(as.matrix(input_data[, c("X", "Y", "Z")])))
+
+rf_pred_V_input <- predict(rf_model_V, newdata = input_data)
+xgb_pred_V_input <- predict(xgb_model_V, newdata = xgb.DMatrix(as.matrix(input_data[, c("X", "Y", "Z")])))
+
+rf_pred_W_input <- predict(rf_model_W, newdata = input_data)
+xgb_pred_W_input <- predict(xgb_model_W, newdata = xgb.DMatrix(as.matrix(input_data[, c("X", "Y", "Z")])))
+
+# Média das Previsões (Ensemble Simples)
+ensemble_pred_Q <- (rf_pred_Q_input + xgb_pred_Q_input) / 2
+ensemble_pred_V <- (rf_pred_V_input + xgb_pred_V_input) / 2
+ensemble_pred_W <- (rf_pred_W_input + xgb_pred_W_input) / 2
+
+# Criar dataset com as previsões
+predictions <- data.frame(
+  Modelo = c("Random Forest", "XGBoost", "Ensemble"),
+  Custo_Predito = c(rf_pred_Q_input, xgb_pred_Q_input, ensemble_pred_Q),
+  Peso_Predito = c(rf_pred_V_input, xgb_pred_V_input, ensemble_pred_V),
+  Horas_Predito = c(rf_pred_W_input, xgb_pred_W_input, ensemble_pred_W)
+)
+
+print(predictions)
+
+# PASSO D: PRINTAR VALORES PREDITOS E CRIAR VARIÁVEIS
+Output_Custo_Predito <- ensemble_pred_Q
+Output_Peso_Predito <- ensemble_pred_V
+Output_Horas_Predita <- ensemble_pred_W
+
+cat("Custo Predito (Ensemble):", Output_Custo_Predito, "\n")
+cat("Peso Predito (Ensemble):", Output_Peso_Predito, "\n")
+cat("Horas Preditas (Ensemble):", Output_Horas_Predita, "\n")
+
+# PASSO E: CARREGAR DADOS REAIS
+dados_reais <- read.csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/Resultados Preliminares/Dados_Reais.csv", fileEncoding = "Latin1")
+
+# PASSO E1: RENOMEAR COLUNAS
+colnames(dados_reais) <- LETTERS[1:5]
+
+# PASSO E2: ALTERAR VÍRGULAS PARA PONTOS
+dados_reais[, c("C", "D", "E")] <- lapply(dados_reais[, c("C", "D", "E")], convert_to_numeric)
+
+# PASSO E3: CLASSIFICAR COLUNAS
+dados_reais[, c("A", "B")] <- lapply(dados_reais[, c("A", "B")], as.factor)
+
+# PASSO E4: CRIAR NOVO DATASET PARA COMPARAÇÃO
+dados_reais_compara <- dados_reais[, c("C", "D", "E")]
+colnames(dados_reais_compara) <- c("Q", "V", "W")
+
+# PASSO F: COMPARAÇÃO COM DADOS REAIS
+cat("Comparação com Dados Reais:\n")
+print(rbind(predictions[3, ], dados_reais_compara))  # Comparar Ensemble com dados reais
+
+# PASSO G: PLOTAR ÁRVORE DE REGRESSÃO (apenas para Random Forest)
+
+# PASSO G1 - GRÁFICO DE IMPORTANCIA DAS VARIÁVEIS
+
+# Importância das variáveis para o modelo de Custo (Q)
+varImpPlot(rf_model_Q, main = "Importância das Variáveis - Custo")
+
+# Importância das variáveis para o modelo de Peso (V)
+varImpPlot(rf_model_V, main = "Importância das Variáveis - Peso")
+
+# Importância das variáveis para o modelo de Horas (W)
+varImpPlot(rf_model_W, main = "Importância das Variáveis - Horas")
+
+# PASSO G2 - EXIBIR PRIMEIRA ÁRVOR DE REGRESSÃO DO RANDOMFOREST
+
+#######################################
+#VARIÁVEL CUSTO
+
+# Extrair a primeira árvore do modelo de Custo (Q)
+tree_Q <- getTree(rf_model_Q, 1, labelVar = TRUE)
+
+# Verificar e tratar valores ausentes em train_data
+if (any(is.na(train_data[, colnames(tree_Q$frame)]))) {
+  stop("Valores ausentes encontrados nas variáveis da árvore.")
+}
+
+# Verificar tipos de dados das variáveis da árvore
+if (!all(sapply(train_data[, colnames(tree_Q$frame)], is.numeric))) {
+  stop("Variáveis não numéricas encontradas na árvore.")
+}
+
+# Converter para objeto rpart
+tree_Q_rpart <- rpart(formula = as.formula(paste("Q ~", paste(colnames(train_data)[!colnames(train_data) %in% "Q"], collapse = "+"))),
+                      data = train_data,
+                      method = "anova")  # Use "class" para classificação
+
+# Copiar os splits da árvore do Random Forest para o objeto rpart
+tree_Q_rpart$splits <- tree_Q$splits
+tree_Q_rpart$csplit <- tree_Q$csplit
+# Certificar de que frame e where existam antes de copiar
+if (!is.null(tree_Q$frame)) {
+  tree_Q_rpart$frame$yval <- tree_Q$frame$yval
+  tree_Q_rpart$frame$n <- tree_Q$frame$n
+}
+if (!is.null(tree_Q$where)) {
+  tree_Q_rpart$where <- tree_Q$where
+}
+
+# Plotar a árvore convertida
+rpart.plot(tree_Q_rpart, main = "Árvore de Regressão (1ª árvore) - Custo")
+
+
+
+#######################################
+#VARIÁVEL PESO
+
+# Extrair a primeira árvore do modelo de Peso (V)
+tree_V <- getTree(rf_model_V, 1, labelVar = TRUE)
+
+# Verificar e tratar valores ausentes em train_data
+if (any(is.na(train_data[, colnames(tree_V$frame)]))) {
+  stop("Valores ausentes encontrados nas variáveis da árvore.")
+}
+
+# Verificar tipos de dados das variáveis da árvore
+if (!all(sapply(train_data[, colnames(tree_V$frame)], is.numeric))) {
+  stop("Variáveis não numéricas encontradas na árvore.")
+}
+
+# Converter para objeto rpart
+tree_V_rpart <- rpart(formula = as.formula(paste("V ~", paste(colnames(train_data)[!colnames(train_data) %in% "V"], collapse = "+"))),
+                      data = train_data,
+                      method = "anova")  # Use "class" para classificação
+
+# Copiar os splits da árvore do Random Forest para o objeto rpart
+tree_V_rpart$splits <- tree_V$splits
+tree_V_rpart$csplit <- tree_V$csplit
+# Certificar de que frame e where existam antes de copiar
+if (!is.null(tree_V$frame)) {
+  tree_V_rpart$frame$yval <- tree_V$frame$yval
+  tree_V_rpart$frame$n <- tree_V$frame$n
+}
+if (!is.null(tree_V$where)) {
+  tree_V_rpart$where <- tree_V$where
+}
+
+# Plotar a árvore convertida
+rpart.plot(tree_V_rpart, main = "Árvore de Regressão (1ª árvore) - Peso")
+
+#######################################
+#VARIÁVEL HORAS
+
+# Extrair a primeira árvore do modelo de Horas (W)
+tree_W <- getTree(rf_model_W, 1, labelVar = TRUE)
+
+# Verificar e tratar valores ausentes em train_data
+if (any(is.na(train_data[, colnames(tree_W$frame)]))) {
+  stop("Valores ausentes encontrados nas variáveis da árvore.")
+}
+
+# Verificar tipos de dados das variáveis da árvore
+if (!all(sapply(train_data[, colnames(tree_W$frame)], is.numeric))) {
+  stop("Variáveis não numéricas encontradas na árvore.")
+}
+
+# Converter para objeto rpart
+tree_W_rpart <- rpart(formula = as.formula(paste("W ~", paste(colnames(train_data)[!colnames(train_data) %in% "W"], collapse = "+"))),
+                      data = train_data,
+                      method = "anova")  # Use "class" para classificação
+
+# Copiar os splits da árvore do Random Forest para o objeto rpart
+tree_W_rpart$splits <- tree_W$splits
+tree_W_rpart$csplit <- tree_W$csplit
+# Certificar de que frame e where existam antes de copiar
+if (!is.null(tree_W$frame)) {
+  tree_W_rpart$frame$yval <- tree_W$frame$yval
+  tree_W_rpart$frame$n <- tree_W$frame$n
+}
+if (!is.null(tree_W$where)) {
+  tree_W_rpart$where <- tree_W$where
+}
+
+# Plotar a árvore convertida
+rpart.plot(tree_W_rpart, main = "Árvore de Regressão (1ª árvore) - Horas")
+#######################################
+
+
+# PASSO G3 - EXIBIR A MELHOR ÁRVORE DO RANDOMFOREST
+
+
+# Função para extrair e plotar a melhor árvore
+plot_best_tree <- function(rf_model, test_data, target_var, title) {
+  tree_errors <- sapply(1:rf_model$ntree, function(i) {
+    tree_pred <- predict(rf_model, newdata = test_data, predict.all = TRUE)$individual[, i]
+    RMSE(tree_pred, test_data[[target_var]])  # Use a variável alvo correta
+  })
+  best_tree_index <- which.min(tree_errors)
+  cat("Índice da melhor árvore (", title, "):", best_tree_index, "\n")
+  
+  # Extrair a melhor árvore
+  best_tree <- getTree(rf_model, best_tree_index, labelVar = TRUE)
+  
+  # Converter para objeto rpart
+  best_tree_rpart <- rpart(formula = as.formula(paste(target_var, "~", paste(colnames(train_data)[!colnames(train_data) %in% target_var], collapse = "+"))),
+                           data = train_data,
+                           method = "anova")  # Use "class" para classificação
+  
+  # Copiar os splits da árvore do Random Forest para o objeto rpart
+  best_tree_rpart$splits <- best_tree$splits
+  best_tree_rpart$csplit <- best_tree$csplit
+  # Certificar de que frame e where existam antes de copiar
+  if (!is.null(best_tree$frame)) {
+    best_tree_rpart$frame$yval <- best_tree$frame$yval
+    best_tree_rpart$frame$n <- best_tree$frame$n
+  }
+  if (!is.null(best_tree$where)) {
+    best_tree_rpart$where <- best_tree$where
+  }
+  
+  # Plotar a árvore convertida
+  rpart.plot(best_tree_rpart, main = title)
+}
+
+# Chamar a função para cada modelo
+par(mfrow = c(1, 3))
+plot_best_tree(rf_model_Q, test_data, "Q", "Melhor Árvore (Menor Erro) - Custo")
+plot_best_tree(rf_model_V, test_data, "V", "Melhor Árvore (Menor Erro) - Peso")
+plot_best_tree(rf_model_W, test_data, "W", "Melhor Árvore (Menor Erro) - Horas")
