@@ -9,7 +9,8 @@ gc()
 library(tidyverse)
 
 # PASSO 3: Carregar banco de dados
-file_path <- "C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/Resultados Preliminares/Dados_Lista_Pecas_Segundo-Trimestre_2022.csv"
+# Banco de dados disponível em: https://github.com/abarbezan/CodigosTCC/blob/main/Dados_Lista_Pecas_Segundo-Trimestre_2022.csv
+file_path <- "DIGITE AQUI O CAMINHO DO CSV" # digitar caminho do CSV
 data <- read.csv(file_path, fileEncoding = "latin1")
 data_original <- read.csv(file_path, fileEncoding = "latin1")
 
