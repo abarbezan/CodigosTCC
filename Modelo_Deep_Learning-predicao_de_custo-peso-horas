@@ -1,0 +1,226 @@
+#PASSO 1: Limpar ambiente
+rm(list = ls())
+gc()
+
+#PASSO 2: Instalar e Carregar pacotes necessários
+install.packages(c("dplyr", "ggplot2", "neuralnet", "caTools", "caret"))
+library(dplyr)
+library(ggplot2)
+library(neuralnet)
+library(caTools)
+library(caret)
+
+#PASSO 3: Carregar o banco de dados
+file_path <- "C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/Resultados Preliminares/Dados_Lista_Pecas_Segundo-Trimestre_2022.csv"
+data <- read.csv(file_path, fileEncoding = "latin1")
+data_original <- read.csv(file_path, fileEncoding = "latin1")
+
+#PASSO 4: Renomear colunas
+colnames(data) <- LETTERS[1:26]
+
+#PASSO 5: AJUSTE DAS VARIÁVEIS NUMÉRICAS
+replace_comma <- function(x) as.numeric(gsub(",", ".", x))
+data <- data %>%
+  mutate_at(vars(C, D, K, L, M, N, O, P, Q, V, W, X, Y, Z), replace_comma)
+str(data)
+numeric_columns <- sapply(data, is.numeric)
+print(numeric_columns)
+data$C <- as.character(data$C)
+numeric_columns <- sapply(data, is.numeric)
+print(numeric_columns)
+
+#PASSO 5.1: Criar datasets com valores originais de input e output
+original_inputs <- data %>% select(R, S, T, X, Y, Z)
+original_outputs <- data %>% select(Q, V, W)
+
+#PASSO 6: Análise Exploratória de Dados (EDA)
+#Gráfico 1
+ggplot(data, aes(x = V, y = Q)) + geom_point() + labs(x = "Peso", y = "Custo")
+
+#Gráfico 2
+data$Volume <- data$X * data$Y * data$Z / (1000^3)
+ggplot(data, aes(x = Volume, y = Q)) + geom_point() + labs(x = "Volume (m³)", y = "Custo")
+
+#Gráfico 3
+ggplot(data, aes(x = W, y = Q)) + geom_point() + labs(x = "Horas de Produção", y = "Custo")
+
+#PASSO 7: Criação da Rede Neural
+#Separar dados de treino e teste
+set.seed(123)
+split <- sample.split(data$Q, SplitRatio = 0.8)
+train_data <- subset(data, split == TRUE)
+test_data <- subset(data, split == FALSE)
+
+#Converter variáveis categóricas em numéricas
+train_data$R <- as.numeric(as.factor(train_data$R))
+train_data$S <- as.numeric(as.factor(train_data$S))
+train_data$T <- as.numeric(as.factor(train_data$T))
+
+test_data$R <- as.numeric(as.factor(test_data$R))
+test_data$S <- as.numeric(as.factor(test_data$S))
+test_data$T <- as.numeric(as.factor(test_data$T))
+
+#Normalizar os dados apenas para colunas numéricas
+normalize <- function(x) { return ((x - min(x)) / (max(x) - min(x))) }
+
+numeric_cols <- sapply(train_data, is.numeric)
+train_data[numeric_cols] <- lapply(train_data[numeric_cols], normalize)
+test_data[numeric_cols] <- lapply(test_data[numeric_cols], normalize)
+
+#Preparar os inputs e outputs
+train_x <- train_data %>%
+  select(X, Y, Z, R, S, T)
+train_y <- train_data %>%
+  select(Q, V, W)
+
+test_x <- test_data %>%
+  select(X, Y, Z, R, S, T)
+test_y <- test_data %>%
+  select(Q, V, W)
+
+#Combinar inputs e outputs para a rede neural
+train_data_nn <- cbind(train_x, train_y)
+colnames(train_data_nn) <- c("X", "Y", "Z", "R", "S", "T", "Q", "V", "W")
+
+#Verificar a estrutura dos dados
+str(train_data_nn)
+
+#Criar e treinar o modelo
+formula <- Q + V + W ~ X + Y + Z + R + S + T
+
+#Rede menos densa
+#nn_model <- neuralnet(formula, data = train_data_nn, hidden = c(5), linear.output = TRUE, stepmax = 1e5, threshold = 0.01)
+
+#Rede mais densa
+#nn_model <- neuralnet(formula, data = train_data_nn, hidden = c(10, 8, 5), linear.output = TRUE, stepmax = 1e5, threshold = 0.01)
+
+#Rede mais densa sem stepmax
+#nn_model <- neuralnet(formula, data = train_data_nn, hidden = c(10, 8, 5), linear.output = TRUE)
+
+#Rede ainda mais densa
+nn_model <- neuralnet(formula, data = train_data_nn, hidden = c(10, 8, 5, 3, 2), linear.output = TRUE, stepmax = 1e5, threshold = 0.01)
+
+#PASSO A: Plot da rede neural desenhada
+plot(nn_model, rep = 0.5)
+
+#PASSO B: Entrada de Dados para Previsão de Outputs
+input_data <- data.frame(
+  X = 11500,
+  Y = 3759,
+  Z = 825,
+  R = "USINADO",
+  S = "INTEGRADO",
+  T = "INTEGRADO"
+)
+
+#Converter variáveis categóricas em numéricas
+input_data$R <- as.numeric(as.factor(input_data$R))
+input_data$S <- as.numeric(as.factor(input_data$S))
+input_data$T <- as.numeric(as.factor(input_data$T))
+
+#Obter valores min e max das colunas de treino
+min_max <- function(x) {
+  return(c(min = min(x), max = max(x)))
+}
+mins <- apply(train_data[, c("X", "Y", "Z", "R", "S", "T")], 2, min)
+maxs <- apply(train_data[, c("X", "Y", "Z", "R", "S", "T")], 2, max)
+
+#Normalizar os dados de entrada usando os valores min e max do conjunto de treino
+normalize_with_min_max <- function(x, min_val, max_val) {
+  return ((x - min_val) / (max_val - min_val))
+}
+
+input_data_normalized <- data.frame(
+  X = normalize_with_min_max(input_data$X, mins["X"], maxs["X"]),
+  Y = normalize_with_min_max(input_data$Y, mins["Y"], maxs["Y"]),
+  Z = normalize_with_min_max(input_data$Z, mins["Z"], maxs["Z"]),
+  R = normalize_with_min_max(input_data$R, mins["R"], maxs["R"]),
+  S = normalize_with_min_max(input_data$S, mins["S"], maxs["S"]),
+  T = normalize_with_min_max(input_data$T, mins["T"], maxs["T"])
+)
+
+#Fazer a previsão
+predictions <- compute(nn_model, as.matrix(input_data_normalized))$net.result
+
+#PASSO C: Previsão de Outputs
+predicted_outputs <- data.frame(
+  Output_Custo_Predito = predictions[1],
+  Output_Peso_Predito = predictions[2],
+  Output_Horas_Predita = predictions[3]
+)
+
+#Função para desnormalizar os dados
+denormalize <- function(x, min_val, max_val) {
+  return (x * (max_val - min_val) + min_val)
+}
+
+#Desnormalizar os valores previstos (usando os valores originais)
+predicted_outputs$Output_Custo_Predito <- denormalize(predicted_outputs$Output_Custo_Predito, min(original_outputs$Q), max(original_outputs$Q))
+predicted_outputs$Output_Peso_Predito <- denormalize(predicted_outputs$Output_Peso_Predito, min(original_outputs$V), max(original_outputs$V))
+predicted_outputs$Output_Horas_Predita <- denormalize(predicted_outputs$Output_Horas_Predita, min(original_outputs$W), max(original_outputs$W))
+
+print(predicted_outputs)
+
+#tem alguma coisa errada escrita aqui, que está fazendo o valor do custo aparecer na coluna do peso, e vice-versa - CORRIGIR
+
+#PASSO D: Carregar os dados reais de output para comparação
+file_path_real <- "C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/Resultados Preliminares/Dados_Reais.csv"
+real_data <- read.csv(file_path_real, fileEncoding = "latin1")
+
+colnames(real_data) <- LETTERS[1:5]
+real_data <- real_data %>%
+  mutate_at(vars(C, D, E), replace_comma)
+
+## PASSO E: Comparação dos dados previstos com os valores de dados reais
+comparison <- data.frame(
+  Predicted_Cost = predicted_outputs$Output_Custo_Predito,
+  Real_Cost = real_data$C,
+  Predicted_Weight = predicted_outputs$Output_Peso_Predito,
+  Real_Weight = real_data$D,
+  Predicted_Hours = predicted_outputs$Output_Horas_Predita,
+  Real_Hours = real_data$E
+)
+
+mae_cost <- mean(abs(comparison$Predicted_Cost - comparison$Real_Cost))
+mse_cost <- mean((comparison$Predicted_Cost - comparison$Real_Cost)^2)
+rmse_cost <- sqrt(mse_cost)
+r2_cost <- cor(comparison$Predicted_Cost, comparison$Real_Cost)^2
+mape_cost <- mean(abs((comparison$Real_Cost - comparison$Predicted_Cost) / comparison$Real_Cost))
+
+mae_weight <- mean(abs(comparison$Predicted_Weight - comparison$Real_Weight))
+mse_weight <- mean((comparison$Predicted_Weight - comparison$Real_Weight)^2)
+rmse_weight <- sqrt(mse_weight)
+r2_weight <- cor(comparison$Predicted_Weight, comparison$Real_Weight)^2
+mape_weight <- mean(abs((comparison$Real_Weight - comparison$Predicted_Weight) / comparison$Real_Weight))
+
+mae_hours <- mean(abs(comparison$Predicted_Hours - comparison$Real_Hours))
+mse_hours <- mean((comparison$Predicted_Hours - comparison$Real_Hours)^2)
+rmse_hours <- sqrt(mse_hours)
+r2_hours <- cor(comparison$Predicted_Hours, comparison$Real_Hours)^2
+mape_hours <- mean(abs(comparison$Real_Hours - comparison$Predicted_Hours))
+
+##################################################
+
+## Cálculo e exibição das métricas (adicionado para avaliar o modelo isoladamente dos valores reais - avaliar como fazer funcionar)
+cat("\n## Métricas de avaliação - Custo ##\n")
+cat("MAE:", mae_cost, "\n")
+cat("MSE:", mse_cost, "\n")
+cat("RMSE:", rmse_cost, "\n")
+cat("R²:", r2_cost, "\n")
+cat("MAPE:", mape_cost, "\n")
+
+cat("\n## Métricas de avaliação - Peso ##\n")
+cat("MAE:", mae_weight, "\n")
+cat("MSE:", mse_weight, "\n")
+cat("RMSE:", rmse_weight, "\n")
+cat("R²:", r2_weight, "\n")
+cat("MAPE:", mape_weight, "\n")
+
+cat("\n## Métricas de avaliação - Horas ##\n")
+cat("MAE:", mae_hours, "\n")
+cat("MSE:", mse_hours, "\n")
+cat("RMSE:", rmse_hours, "\n")
+cat("R²:", r2_hours, "\n")
+
+##################################################
+cat("MAPE:", mape_hours, "\n")
