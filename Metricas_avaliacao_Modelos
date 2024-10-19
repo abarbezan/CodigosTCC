@@ -1,3 +1,8 @@
+## Acessar os dados dos valores preditos arquivo .zip no caminho: https://github.com/abarbezan/CodigosTCC/blob/main/Matriz_resultados_Predicoes.zip
+### arquivo_1 representam a primeira rodada de predições com set.seed(123)
+#### arquivo_2 representam a segunda rodada de predições com set.seed random
+##### arquivo_3 representam a terceira rodada de predições com set.seed random e após a limpeza dos dados
+
 # 0. Limpar ambiente
 rm(list = ls())
 gc()
