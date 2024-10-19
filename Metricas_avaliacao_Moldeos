@@ -1,0 +1,240 @@
+# 0. Limpar ambiente
+rm(list = ls())
+gc()
+
+# 1 – Instalar e carregar pacotes necessários
+install.packages(c("readr", "dplyr", "Metrics", "openxlsx"))
+library(readr)
+library(dplyr)
+library(Metrics)
+library(openxlsx)
+
+# 2 – Carregar os Dados reais
+dados_reais <- read_csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/TCC arquivo final/Dados/Resultados Predicao/Carregar no R/Dados Reais 3o Trimestre.csv")
+
+# 3 – Carregar os Dados do método analógico-paramétrico
+analogo_parametrico <- read_csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/TCC arquivo final/Dados/Resultados Predicao/Carregar no R/Analogo parametrico.csv")
+
+# 4 – Carregar os Dados dos métodos de Deep Learning
+
+#4.1 - Carregar os Dados da rede neural com 1 camada
+Neuralnet_1layer <- read_csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/TCC arquivo final/Dados/Resultados Predicao/Carregar no R/Neuralnet_1layer.csv")
+
+#4.2 - Carregar os Dados da rede neural com 3 camadas
+Neuralnet_3layers <- read_csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/TCC arquivo final/Dados/Resultados Predicao/Carregar no R/Neuralnet_3layers.csv")
+
+#4.3 - Carregar os Dados da rede neural com 5 camadas
+Neuralnet_5layers <- read_csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/TCC arquivo final/Dados/Resultados Predicao/Carregar no R/Neuralnet_5layers.csv")
+
+
+# 5 – Carregar os Dados dos métodos de Ensemble
+
+#5.1 - Carregar os Dados random forest
+random_forest <- read_csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/TCC arquivo final/Dados/Resultados Predicao/Carregar no R/Random_Forest.csv")
+
+#5.2 - Carregar os Dados XGBoost
+XBoost <- read_csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/TCC arquivo final/Dados/Resultados Predicao/Carregar no R/XBoost.csv")
+
+#5.3 - Carregar os Ensemble_final
+Ensemble_Final <- read_csv("C:/Users/andre/Documents/Adriano/MBA - Data Science/TCC/TCC arquivo final/Dados/Resultados Predicao/Carregar no R/Ensemble final.csv")
+
+#5.4 – Garantir que todos os dados tenham a mesma nomenclatura nas colunas e formatos corretos
+colnames(dados_reais) <- c("Modelo", "Custo", "Peso", "Horas_Produtivas")
+colnames(analogo_parametrico) <- c("Modelo", "Custo", "Peso", "Horas_Produtivas")
+colnames(Neuralnet_1layer) <- c("Modelo", "Custo", "Peso", "Horas_Produtivas")
+colnames(Neuralnet_3layers) <- c("Modelo", "Custo", "Peso", "Horas_Produtivas")
+colnames(Neuralnet_5layers) <- c("Modelo", "Custo", "Peso", "Horas_Produtivas")
+colnames(random_forest) <- c("Modelo", "Custo", "Peso", "Horas_Produtivas")
+colnames(XBoost) <- c("Modelo", "Custo", "Peso", "Horas_Produtivas")
+colnames(Ensemble_Final) <- c("Modelo", "Custo", "Peso", "Horas_Produtivas")
+
+#5.5 – Check da classificação das variáveis
+str(dados_reais)
+str(analogo_parametrico)
+str(Neuralnet_1layer)
+str(Neuralnet_3layers)
+str(Neuralnet_5layers)
+str(random_forest)
+str(XBoost)
+str(Ensemble_Final)
+
+# 6 - Função para calcular R² manualmente
+calcular_r2 <- function(real, predito) {
+  ss_res <- sum((real - predito)^2)
+  ss_tot <- sum((real - mean(real))^2)
+  r2 <- 1 - (ss_res / ss_tot)
+  return(r2)
+}
+  
+# 7 - Calcular as métricas
+calcular_metricas <- function(real, predito) {
+  r2_val <- calcular_r2(real, predito)
+  mae_val <- mae(real, predito)
+  mape_val <- mape(real, predito)
+  mse_val <- mse(real, predito)
+  rmse_val <- rmse(real, predito)
+  return(c(R2 = r2_val, MAE = mae_val, MAPE = mape_val, MSE = mse_val, RMSE = rmse_val))
+}
+    
+# 8 - Aplicar as métricas para analogo_parametrico
+metricas_custo_AP <- calcular_metricas(dados_reais$Custo, analogo_parametrico$Custo)
+metricas_peso_AP <- calcular_metricas(dados_reais$Peso, analogo_parametrico$Peso)
+metricas_horas_AP <- calcular_metricas(dados_reais$Horas_Produtivas, analogo_parametrico$Horas_Produtivas)
+
+# 8.1 - Compilar os resultados em uma tabela final para analogo_parametrico
+tabela_resultados_AP <- data.frame(
+  Modelo = "Análogo - Paramétrico",
+  Custo_R2 = metricas_custo_AP["R2"], Custo_MAE = metricas_custo_AP["MAE"], Custo_MAPE = metricas_custo_AP["MAPE"],
+  Custo_MSE = metricas_custo_AP["MSE"], Custo_RMSE = metricas_custo_AP["RMSE"],
+  
+  Peso_R2 = metricas_peso_AP["R2"], Peso_MAE = metricas_peso_AP["MAE"], Peso_MAPE = metricas_peso_AP["MAPE"],
+  Peso_MSE = metricas_peso_AP["MSE"], Peso_RMSE = metricas_peso_AP["RMSE"],
+  
+  Horas_R2 = metricas_horas_AP["R2"], Horas_MAE_AP = metricas_horas_AP["MAE"], Horas_MAPE = metricas_horas_AP["MAPE"],
+  Horas_MSE = metricas_horas_AP["MSE"], Horas_RMSE_AP = metricas_horas_AP["RMSE"]
+)
+
+# 8.2 - Mostrar tabela de resultados
+print(tabela_resultados_AP)
+
+# 9 - Aplicar as métricas para Neural Net 1 layer
+metricas_custo_NN1 <- calcular_metricas(dados_reais$Custo, Neuralnet_1layer$Custo)
+metricas_peso_NN1 <- calcular_metricas(dados_reais$Peso, Neuralnet_1layer$Peso)
+metricas_horas_NN1 <- calcular_metricas(dados_reais$Horas_Produtivas, Neuralnet_1layer$Horas_Produtivas)
+
+# 9.1 - Compilar os resultados em uma tabela final para Neural Net 1 layer
+tabela_resultados_NN1 <- data.frame(
+  Modelo = "Rede Neural 1 Camada",
+  Custo_R2 = metricas_custo_NN1["R2"], Custo_MAE = metricas_custo_NN1["MAE"], Custo_MAPE = metricas_custo_NN1["MAPE"],
+  Custo_MSE = metricas_custo_NN1["MSE"], Custo_RMSE = metricas_custo_NN1["RMSE"],
+  
+  Peso_R2 = metricas_peso_NN1["R2"], Peso_MAE = metricas_peso_NN1["MAE"], Peso_MAPE = metricas_peso_NN1["MAPE"],
+  Peso_MSE = metricas_peso_NN1["MSE"], Peso_RMSE = metricas_peso_NN1["RMSE"],
+  
+  Horas_R2 = metricas_horas_NN1["R2"], Horas_MAE_NN1 = metricas_horas_AP["MAE"], Horas_MAPE = metricas_horas_NN1["MAPE"],
+  Horas_MSE = metricas_horas_NN1["MSE"], Horas_RMSE_NN1 = metricas_horas_AP["RMSE"]
+)
+
+# 9.2 - Mostrar tabela de resultados
+print(tabela_resultados_NN1)
+
+# 10 - Aplicar as métricas para Neural Net 3 layers
+metricas_custo_NN3 <- calcular_metricas(dados_reais$Custo, Neuralnet_3layers$Custo)
+metricas_peso_NN3 <- calcular_metricas(dados_reais$Peso, Neuralnet_3layers$Peso)
+metricas_horas_NN3 <- calcular_metricas(dados_reais$Horas_Produtivas, Neuralnet_3layers$Horas_Produtivas)
+
+# 10.1 - Compilar os resultados em uma tabela final para Neural Net 3 layers
+tabela_resultados_NN3 <- data.frame(
+  Modelo = "Rede Neural 3 Camadas",
+  Custo_R2 = metricas_custo_NN3["R2"], Custo_MAE = metricas_custo_NN3["MAE"], Custo_MAPE = metricas_custo_NN3["MAPE"],
+  Custo_MSE = metricas_custo_NN3["MSE"], Custo_RMSE = metricas_custo_NN3["RMSE"],
+  
+  Peso_R2 = metricas_peso_NN3["R2"], Peso_MAE = metricas_peso_NN3["MAE"], Peso_MAPE = metricas_peso_NN3["MAPE"],
+  Peso_MSE = metricas_peso_NN3["MSE"], Peso_RMSE = metricas_peso_NN3["RMSE"],
+  
+  Horas_R2 = metricas_horas_NN3["R2"], Horas_MAE_NN3 = metricas_horas_AP["MAE"], Horas_MAPE = metricas_horas_NN3["MAPE"],
+  Horas_MSE = metricas_horas_NN3["MSE"], Horas_RMSE_NN3 = metricas_horas_AP["RMSE"]
+)
+
+# 10.2 - Mostrar tabela de resultados
+print(tabela_resultados_NN3)
+
+# 11 - Aplicar as métricas para Neural Net 5 layers
+metricas_custo_NN5 <- calcular_metricas(dados_reais$Custo, Neuralnet_5layers$Custo)
+metricas_peso_NN5 <- calcular_metricas(dados_reais$Peso, Neuralnet_5layers$Peso)
+metricas_horas_NN5 <- calcular_metricas(dados_reais$Horas_Produtivas, Neuralnet_5layers$Horas_Produtivas)
+
+# 11.1 - Compilar os resultados em uma tabela final para Neural Net 5 layers
+tabela_resultados_NN5 <- data.frame(
+  Modelo = "Rede Neural 5 Camadas",
+  Custo_R2 = metricas_custo_NN5["R2"], Custo_MAE = metricas_custo_NN5["MAE"], Custo_MAPE = metricas_custo_NN5["MAPE"],
+  Custo_MSE = metricas_custo_NN5["MSE"], Custo_RMSE = metricas_custo_NN5["RMSE"],
+  
+  Peso_R2 = metricas_peso_NN5["R2"], Peso_MAE = metricas_peso_NN5["MAE"], Peso_MAPE = metricas_peso_NN5["MAPE"],
+  Peso_MSE = metricas_peso_NN5["MSE"], Peso_RMSE = metricas_peso_NN5["RMSE"],
+  
+  Horas_R2 = metricas_horas_NN5["R2"], Horas_MAE_NN5 = metricas_horas_AP["MAE"], Horas_MAPE = metricas_horas_NN5["MAPE"],
+  Horas_MSE = metricas_horas_NN5["MSE"], Horas_RMSE_NN5 = metricas_horas_AP["RMSE"]
+)
+
+# 11.2 - Mostrar tabela de resultados
+print(tabela_resultados_NN5)
+
+# 12 - Aplicar as métricas para Random_Forest
+metricas_custo_RandFor <- calcular_metricas(dados_reais$Custo, random_forest$Custo)
+metricas_peso_RandFor <- calcular_metricas(dados_reais$Peso, random_forest$Peso)
+metricas_horas_RandFor <- calcular_metricas(dados_reais$Horas_Produtivas, random_forest$Horas_Produtivas)
+
+# 12.1 - Compilar os resultados em uma tabela final para Random_Forest
+tabela_resultados_RandFor <- data.frame(
+  Modelo = "random_forest",
+  Custo_R2 = metricas_custo_RandFor["R2"], Custo_MAE = metricas_custo_RandFor["MAE"], Custo_MAPE = metricas_custo_RandFor["MAPE"],
+  Custo_MSE = metricas_custo_RandFor["MSE"], Custo_RMSE = metricas_custo_RandFor["RMSE"],
+  
+  Peso_R2 = metricas_peso_RandFor["R2"], Peso_MAE = metricas_peso_RandFor["MAE"], Peso_MAPE = metricas_peso_RandFor["MAPE"],
+  Peso_MSE = metricas_peso_RandFor["MSE"], Peso_RMSE = metricas_peso_RandFor["RMSE"],
+  
+  Horas_R2 = metricas_horas_RandFor["R2"], Horas_MAE_RandFor = metricas_horas_AP["MAE"], Horas_MAPE = metricas_horas_RandFor["MAPE"],
+  Horas_MSE = metricas_horas_RandFor["MSE"], Horas_RMSE_RandFor = metricas_horas_AP["RMSE"]
+)
+
+# 12.2 - Mostrar tabela de resultados
+print(tabela_resultados_RandFor)
+
+# 13 - Aplicar as métricas para XGBoost
+metricas_custo_XGB <- calcular_metricas(dados_reais$Custo, XBoost$Custo)
+metricas_peso_XGB <- calcular_metricas(dados_reais$Peso, XBoost$Peso)
+metricas_horas_XGB <- calcular_metricas(dados_reais$Horas_Produtivas, XBoost$Horas_Produtivas)
+
+# 13.1 - Compilar os resultados em uma tabela final para Neural XGBoost
+tabela_resultados_XGB <- data.frame(
+  Modelo = "XGBoost",
+  Custo_R2 = metricas_custo_XGB["R2"], Custo_MAE = metricas_custo_XGB["MAE"], Custo_MAPE = metricas_custo_XGB["MAPE"],
+  Custo_MSE = metricas_custo_XGB["MSE"], Custo_RMSE = metricas_custo_XGB["RMSE"],
+  
+  Peso_R2 = metricas_peso_XGB["R2"], Peso_MAE = metricas_peso_XGB["MAE"], Peso_MAPE = metricas_peso_XGB["MAPE"],
+  Peso_MSE = metricas_peso_XGB["MSE"], Peso_RMSE = metricas_peso_XGB["RMSE"],
+  
+  Horas_R2 = metricas_horas_XGB["R2"], Horas_MAE_XGB = metricas_horas_AP["MAE"], Horas_MAPE = metricas_horas_XGB["MAPE"],
+  Horas_MSE = metricas_horas_XGB["MSE"], Horas_RMSE_XGB = metricas_horas_AP["RMSE"]
+)
+
+# 13.2 - Mostrar tabela de resultados
+print(tabela_resultados_XGB)
+
+# 14 - Aplicar as métricas para Ensembleoost
+metricas_custo_Ensemble <- calcular_metricas(dados_reais$Custo, Ensemble_Final$Custo)
+metricas_peso_Ensemble <- calcular_metricas(dados_reais$Peso, Ensemble_Final$Peso)
+metricas_horas_Ensemble <- calcular_metricas(dados_reais$Horas_Produtivas, Ensemble_Final$Horas_Produtivas)
+
+# 14.1 - Compilar os resultados em uma tabela final para Neural Net 1 layer
+tabela_resultados_Ensemble <- data.frame(
+  Modelo = "Ensemble",
+  Custo_R2 = metricas_custo_Ensemble["R2"], Custo_MAE = metricas_custo_Ensemble["MAE"], Custo_MAPE = metricas_custo_Ensemble["MAPE"],
+  Custo_MSE = metricas_custo_Ensemble["MSE"], Custo_RMSE = metricas_custo_Ensemble["RMSE"],
+  
+  Peso_R2 = metricas_peso_Ensemble["R2"], Peso_MAE = metricas_peso_Ensemble["MAE"], Peso_MAPE = metricas_peso_Ensemble["MAPE"],
+  Peso_MSE = metricas_peso_Ensemble["MSE"], Peso_RMSE = metricas_peso_Ensemble["RMSE"],
+  
+  Horas_R2 = metricas_horas_Ensemble["R2"], Horas_MAE_Ensemble = metricas_horas_AP["MAE"], Horas_MAPE = metricas_horas_Ensemble["MAPE"],
+  Horas_MSE = metricas_horas_Ensemble["MSE"], Horas_RMSE_Ensemble = metricas_horas_AP["RMSE"]
+)
+
+# 14.2 - Mostrar tabela de resultados
+print(tabela_resultados_Ensemble)
+
+# 15 - Combinar todas as tabelas de resultados em uma única matriz
+tabela_final <- rbind(
+  tabela_resultados_AP,
+  tabela_resultados_NN1,
+  tabela_resultados_NN3,
+  tabela_resultados_NN5,
+  tabela_resultados_RandFor,
+  tabela_resultados_XGB,
+  tabela_resultados_Ensemble
+)
+
+# 16 - Mostrar a matriz final
+print(matriz_resultados_final)
+
+
